@@ -84,7 +84,7 @@ in
           User = cfg.username;
           Type = "exec";
           ExecStart = "${launch-script}/bin/launch-script";
-          TimeoutStopSec = "${(builtins.toString (cfg.shutdown-seconds + 60))}s"
+          TimeoutStopSec = "${(builtins.toString (cfg.shutdown-seconds + 60))}s";
           Restart = "always";
           KillSignal = "SIGINT"; # Resonite doesn't respond to SIGTERM and dies immediately
         };
