@@ -79,6 +79,7 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
           }
           _ = ctrl_c => {
             println!("Received Ctrl+C");
+            shutdown_process(&tx,shutdown_delay, cancel_token.clone()).await;
             break;
           }
         }
@@ -91,7 +92,7 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
 async fn handle_socket(
     result: std::io::Result<(TcpStream, SocketAddr)>,
     shutdown_warning_sender: &Sender<()>,
-    shutdown_duration: Duration,
+    shutdown_delay: Duration,
     cancellation_token: CancellationToken,
 ) -> Result<(), Error> {
     let (socket, _) = result?;
@@ -109,18 +110,8 @@ async fn handle_socket(
             match text {
                 "shutdown" => {
                     println!("Shutdown signal received");
-                    if shutdown_warning_sender.receiver_count() > 0 {
-                        if let Err(err) = shutdown_warning_sender.send(()) {
-                            eprintln!("Failed to send shutdown warning signal: {}", err);
-                        } else {
-                            println!("Awaiting timeout");
-                            sleep(shutdown_duration).await;
-                        }
-                    } else {
-                        println!("No listener registered");
-                    }
-
-                    cancellation_token.cancel();
+                    shutdown_process(shutdown_warning_sender, shutdown_delay, cancellation_token)
+                        .await;
                 }
                 "register_shutdown_warning" => {
                     println!("Shutdown warning registration received");
@@ -128,7 +119,7 @@ async fn handle_socket(
                     tokio::spawn(async move {
                         match receiver.recv().await {
                             Ok(_) => {
-                                let shutdown_timestamp = Utc::now().add(shutdown_duration);
+                                let shutdown_timestamp = Utc::now().add(shutdown_delay);
                                 let iso8601 = shutdown_timestamp.to_rfc3339();
                                 let command = format!("shutdown_at:{}", iso8601);
                                 println!("Sending shutdown command to {}: {}", peer_addr, command);
@@ -158,4 +149,24 @@ async fn handle_socket(
     }
 
     Ok(())
+}
+
+async fn shutdown_process(
+    shutdown_warning_sender: &Sender<()>,
+    shutdown_delay: Duration,
+    cancellation_token: CancellationToken,
+) {
+    if shutdown_warning_sender.receiver_count() > 0 {
+        println!("Sending shutdown warning signal");
+        if let Err(err) = shutdown_warning_sender.send(()) {
+            eprintln!("Failed to send shutdown warning signal: {}", err);
+        } else {
+            println!("Awaiting timeout");
+            sleep(shutdown_delay).await;
+        }
+    } else {
+        println!("No listener registered");
+    }
+
+    cancellation_token.cancel();
 }
