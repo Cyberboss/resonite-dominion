@@ -55,7 +55,7 @@ in
         description = service-name;
         serviceConfig = {
           Type = "exec";
-          ExecStart = "${launch-script}/bin/${launch-script}";
+          ExecStart = "${launch-script}/bin/launch-script";
           TimeoutStartSec = "30m";
           Restart = "always";
           KillSignal = "SIGINT"; # Resonite doesn't respond to SIGTERM and dies immediately
