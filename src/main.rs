@@ -95,7 +95,13 @@ async fn handle_socket(
     cancellation_token: CancellationToken,
 ) -> Result<(), Error> {
     let (socket, _) = result?;
+    println!(
+        "Socket connection established ({}), upgrading to websocket...",
+        socket.peer_addr()
+    );
     let (_request, mut ws_stream) = ServerBuilder::new().accept(socket).await?;
+
+    println!("Websocket connection established, awaiting command...");
     if let Some(Ok(msg)) = ws_stream.next().await {
         if let Some(text) = msg.as_text() {
             match text {
