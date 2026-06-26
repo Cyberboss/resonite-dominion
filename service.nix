@@ -66,6 +66,7 @@ in
         ];
         requires = [ cfg.headless-service ];
         before = [ cfg.headless-service ];
+        wantedBy = [ "multi-user.target" ];
       };
     };
   };
