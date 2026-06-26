@@ -1,6 +1,6 @@
 [package]
 name = "resonite-dominion"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 
 [profile.release]
@@ -14,7 +14,6 @@ chrono = { version = "0.4.45", features = ["alloc"] }
 clap = { version = "4.6.1", features = ["derive"] }
 futures-util = { version = "0.3.32", features = ["futures-sink", "sink"] }
 http = "1.4.2"
-systemctl = "0.5.0"
 tokio = { version = "1.52.3", features = ["full"] }
 tokio-util = { version = "0.7.18", features = ["futures-util"] }
 tokio-websockets = { version = "0.13.3", features = [

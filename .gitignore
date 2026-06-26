@@ -3,4 +3,6 @@
 !.gitignore
 !Cargo.lock
 !Cargo.toml
+!flake.nix
+!service.nix
 !/src/**

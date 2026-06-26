@@ -58,10 +58,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if let Some(stop_service) = cli.stop_systemd_service {
-        systemctl::SystemCtl::default().stop(&stop_service)?;
-    }
-
     Ok(())
 }
 
