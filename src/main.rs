@@ -95,15 +95,17 @@ async fn handle_socket(
     cancellation_token: CancellationToken,
 ) -> Result<(), Error> {
     let (socket, _) = result?;
+    let peer_addr = socket.peer_addr()?;
     println!(
         "Socket connection established ({}), upgrading to websocket...",
-        socket.peer_addr()?
+        peer_addr
     );
     let (_request, mut ws_stream) = ServerBuilder::new().accept(socket).await?;
 
     println!("Websocket connection established, awaiting command...");
     if let Some(Ok(msg)) = ws_stream.next().await {
         if let Some(text) = msg.as_text() {
+            println!("Received text command: {}", text);
             match text {
                 "shutdown" => {
                     println!("Shutdown signal received");
@@ -121,6 +123,7 @@ async fn handle_socket(
                     cancellation_token.cancel();
                 }
                 "register_shutdown_warning" => {
+                    println!("Shutdown warning registration received");
                     let mut receiver = shutdown_warning_sender.subscribe();
                     tokio::spawn(async move {
                         match receiver.recv().await {
@@ -128,6 +131,7 @@ async fn handle_socket(
                                 let shutdown_timestamp = Utc::now().add(shutdown_duration);
                                 let iso8601 = shutdown_timestamp.to_rfc3339();
                                 let command = format!("shutdown_at:{}", iso8601);
+                                println!("Sending shutdown command to {}: {}", peer_addr, command);
                                 if let Err(error) = ws_stream.send(Message::text(command)).await {
                                     eprintln!(
                                         "Error sending shutdown message, short circuiting delay: {}",
@@ -143,11 +147,13 @@ async fn handle_socket(
                     });
                 }
                 _ => {
-                    let message = format!("Unrecognized command: {}", text);
+                    let message = format!("Unrecognized command!");
                     println!("{}", message);
                     ws_stream.send(Message::text(message)).await?
                 }
             }
+        } else {
+            eprintln!("Received non-text command!");
         }
     }
 
