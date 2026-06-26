@@ -33,6 +33,23 @@ in
       '';
       default = 600;
     };
+
+    username = lib.mkOption {
+      type = lib.types.nonEmptyStr;
+      default = service-name;
+      description = ''
+        The name of the user used to execute ${service-name}.
+      '';
+    };
+
+    groupname = lib.mkOption {
+      type = lib.types.nonEmptyStr;
+      default = service-name;
+      description = ''
+        The name of group the user used to execute ${service-name} will belong to.
+      '';
+    };
+
     port = lib.mkOption {
       type = lib.types.ints.u16;
       description = ''
@@ -40,6 +57,7 @@ in
       '';
       default = 24444;
     };
+
     headless-service = lib.mkOption {
       type = lib.types.nonEmptyStr;
       description = ''
@@ -50,13 +68,23 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    users = {
+      groups."${cfg.groupname}" = { };
+      users."${cfg.username}" = {
+        isSystemUser = true;
+        createHome = true;
+        group = cfg.groupname;
+      };
+    };
+
     systemd.services = {
       "${service-name}" = {
         description = service-name;
         serviceConfig = {
+          User = cfg.username;
           Type = "exec";
           ExecStart = "${launch-script}/bin/launch-script";
-          TimeoutStartSec = "30m";
+          TimeoutStopSec = "${(builtins.toString (cfg.shutdown-seconds + 60))}s"
           Restart = "always";
           KillSignal = "SIGINT"; # Resonite doesn't respond to SIGTERM and dies immediately
         };
