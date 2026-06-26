@@ -19,7 +19,7 @@ let
   
   launch-script = pkgs.writeShellScriptBin "launch-script" ''
     set -euxo pipefail
-    exec ${package}/bin/resonite-dominion --port ${cfg.port} --shutdown-seconds ${cfg.shutdown-seconds}
+    exec ${package}/bin/resonite-dominion --port ${builtins.toString cfg.port} --shutdown-seconds ${cfg.shutdown-seconds}
   '';
 in
 {
