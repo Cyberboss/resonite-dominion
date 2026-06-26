@@ -92,9 +92,9 @@ in
           cfg.shutdown-seconds
           cfg.headless-service
         ];
-        requires = [ cfg.headless-service ];
-        before = [ cfg.headless-service ];
-        wantedBy = [ "multi-user.target" ];
+        bindsTo = [ cfg.headless-service ];
+        after = [ cfg.headless-service ];
+        wantedBy = [ cfg.headless-service ];
       };
     };
   };
