@@ -41,7 +41,7 @@ in
       default = 24444;
     };
     headless-service = lib.mkOption {
-      type = lib.types.nonEmptyString;
+      type = lib.types.nonEmptyStr;
       description = ''
         The name of the resonite-headless service ending in ".service".
       '';
