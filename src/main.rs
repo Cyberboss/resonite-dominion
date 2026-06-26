@@ -121,7 +121,7 @@ async fn handle_socket(
                             Ok(_) => {
                                 let shutdown_timestamp = Utc::now().add(shutdown_duration);
                                 let iso8601 = shutdown_timestamp.to_rfc3339();
-                                let command = format!("shutdown_in: {}", iso8601);
+                                let command = format!("shutdown_at:{}", iso8601);
                                 if let Err(error) = ws_stream.send(Message::text(command)).await {
                                     eprintln!(
                                         "Error sending shutdown message, short circuiting delay: {}",
