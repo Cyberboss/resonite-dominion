@@ -97,7 +97,7 @@ async fn handle_socket(
     let (socket, _) = result?;
     println!(
         "Socket connection established ({}), upgrading to websocket...",
-        socket.peer_addr()
+        socket.peer_addr()?
     );
     let (_request, mut ws_stream) = ServerBuilder::new().accept(socket).await?;
 
