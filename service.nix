@@ -88,10 +88,6 @@ in
           Restart = "always";
           KillSignal = "SIGINT"; # Resonite doesn't respond to SIGTERM and dies immediately
         };
-        restartTriggers = [
-          cfg.shutdown-seconds
-          cfg.headless-service
-        ];
         bindsTo = [ cfg.headless-service ];
         after = [ cfg.headless-service ];
         wantedBy = [ cfg.headless-service ];
