@@ -6,3 +6,4 @@
 !flake.nix
 !service.nix
 !/src/**
+!/.github/**
