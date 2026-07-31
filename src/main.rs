@@ -1,4 +1,14 @@
-use std::{net::SocketAddr, ops::Add, pin::pin, str::FromStr, time::Duration};
+use std::{
+    net::SocketAddr,
+    ops::Add,
+    pin::pin,
+    str::FromStr,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    },
+    time::Duration,
+};
 
 use chrono::prelude::Utc;
 use clap::{Parser, Subcommand};
@@ -7,7 +17,7 @@ use http::Uri;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::broadcast::{self, Sender},
-    time::sleep,
+    time::{Instant, sleep},
 };
 use tokio_util::sync::CancellationToken;
 use tokio_websockets::{ClientBuilder, Error, Message, ServerBuilder};
@@ -68,18 +78,19 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
     let mut ctrl_c = pin!(tokio::signal::ctrl_c().fuse());
 
     println!("Server started");
+    let receiver_count = AtomicU8::new(0);
     loop {
         let mut cancellation = pin!(cancel_token.cancelled().fuse());
         let mut accept = pin!(listener.accept().fuse());
 
         select! {
-          result = accept => handle_socket(result, &tx, shutdown_delay, cancel_token.clone()).await?,
+          result = accept => handle_socket(result, &tx, shutdown_delay, cancel_token.clone(), &receiver_count).await?,
           _ = cancellation => {
             break;
           }
           _ = ctrl_c => {
             println!("Received Ctrl+C");
-            shutdown_process(&tx,shutdown_delay, cancel_token.clone()).await;
+            shutdown_process(&tx,shutdown_delay, cancel_token.clone(), &receiver_count).await;
             break;
           }
         }
@@ -94,6 +105,7 @@ async fn handle_socket(
     shutdown_warning_sender: &Sender<()>,
     shutdown_delay: Duration,
     cancellation_token: CancellationToken,
+    receiver_count: &AtomicU8,
 ) -> Result<(), Error> {
     let (socket, _) = result?;
     let peer_addr = socket.peer_addr()?;
@@ -101,47 +113,76 @@ async fn handle_socket(
         "Socket connection established ({}), upgrading to websocket...",
         peer_addr
     );
-    let (_request, mut ws_stream) = ServerBuilder::new().accept(socket).await?;
+    let (_request, ws_stream) = ServerBuilder::new().accept(socket).await?;
 
+    let (ws_sender, mut ws_receiver) = ws_stream.split();
+    let mut ws_sender_option = Some(ws_sender);
+
+    let shutdown_warning_registered = Arc::new(AtomicBool::new(false));
     println!("Websocket connection established, awaiting command...");
-    if let Some(Ok(msg)) = ws_stream.next().await {
+
+    while let Some(Ok(msg)) = ws_receiver.next().await {
         if let Some(text) = msg.as_text() {
             println!("Received text command: {}", text);
             match text {
                 "shutdown" => {
                     println!("Shutdown signal received");
-                    shutdown_process(shutdown_warning_sender, shutdown_delay, cancellation_token)
-                        .await;
+                    shutdown_process(
+                        shutdown_warning_sender,
+                        shutdown_delay,
+                        cancellation_token.clone(),
+                        &receiver_count,
+                    )
+                    .await;
                 }
                 "register_shutdown_warning" => {
                     println!("Shutdown warning registration received");
-                    let mut receiver = shutdown_warning_sender.subscribe();
-                    tokio::spawn(async move {
-                        match receiver.recv().await {
-                            Ok(_) => {
-                                let shutdown_timestamp = Utc::now().add(shutdown_delay);
-                                let iso8601 = shutdown_timestamp.to_rfc3339();
-                                let command = format!("shutdown_at:{}", iso8601);
-                                println!("Sending shutdown command to {}: {}", peer_addr, command);
-                                if let Err(error) = ws_stream.send(Message::text(command)).await {
-                                    eprintln!(
-                                        "Error sending shutdown message, short circuiting delay: {}",
-                                        error
+                    shutdown_warning_registered.store(false, Ordering::Release);
+                    receiver_count.fetch_add(1, Ordering::Relaxed);
+                    let inner_warning = shutdown_warning_registered.clone();
+                    let inner_token = cancellation_token.clone();
+                    if let Some(mut ws_sender) = ws_sender_option.take() {
+                        let mut receiver = shutdown_warning_sender.subscribe();
+                        tokio::spawn(async move {
+                            match receiver.recv().await {
+                                Ok(_) => {
+                                    if !inner_warning.load(Ordering::Acquire) {
+                                        inner_token.cancel();
+                                        return;
+                                    }
+
+                                    let shutdown_timestamp = Utc::now().add(shutdown_delay);
+                                    let iso8601 = shutdown_timestamp.to_rfc3339();
+                                    let command = format!("shutdown_at:{}", iso8601);
+                                    println!(
+                                        "Sending shutdown command to {}: {}",
+                                        peer_addr, command
                                     );
-                                    cancellation_token.cancel();
+                                    if let Err(error) = ws_sender.send(Message::text(command)).await
+                                    {
+                                        eprintln!(
+                                            "Error sending shutdown message, short circuiting delay: {}",
+                                            error
+                                        );
+                                        inner_token.cancel();
+                                    }
+                                }
+                                Err(err) => {
+                                    eprintln!(
+                                        "Shutdown warning registration receive error: {}",
+                                        err
+                                    )
                                 }
                             }
-                            Err(err) => {
-                                eprintln!("Shutdown warning registration receive error: {}", err)
-                            }
-                        }
-                    });
+                        });
+                    }
                 }
-                _ => {
-                    let message = format!("Unrecognized command!");
-                    println!("{}", message);
-                    ws_stream.send(Message::text(message)).await?
+                "unregister_shutdown_warning" => {
+                    println!("Shutdown warning registration removed");
+                    receiver_count.fetch_sub(1, Ordering::Relaxed);
+                    shutdown_warning_registered.store(false, Ordering::Release);
                 }
+                _ => {}
             }
         } else {
             eprintln!("Received non-text command!");
@@ -155,17 +196,31 @@ async fn shutdown_process(
     shutdown_warning_sender: &Sender<()>,
     shutdown_delay: Duration,
     cancellation_token: CancellationToken,
+    receiver_count: &AtomicU8,
 ) {
-    if shutdown_warning_sender.receiver_count() > 0 {
+    if receiver_count.load(Ordering::Relaxed) > 0 {
         println!("Sending shutdown warning signal");
         if let Err(err) = shutdown_warning_sender.send(()) {
             eprintln!("Failed to send shutdown warning signal: {}", err);
         } else {
             println!("Awaiting timeout");
-            sleep(shutdown_delay).await;
+
+            let target_time = Instant::now() + shutdown_delay;
+
+            println!(
+                "{} listener(s) registered",
+                receiver_count.load(Ordering::Relaxed)
+            );
+            while Instant::now() < target_time && receiver_count.load(Ordering::SeqCst) > 0 {
+                sleep(Duration::from_millis(100)).await;
+            }
+
+            if Instant::now() < target_time {
+                println!("All listeners unregistered!")
+            }
         }
     } else {
-        println!("No listener registered");
+        println!("No listener(s) registered");
     }
 
     cancellation_token.cancel();
