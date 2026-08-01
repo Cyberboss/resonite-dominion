@@ -78,7 +78,7 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
     let mut ctrl_c = pin!(tokio::signal::ctrl_c().fuse());
 
     println!("Server started");
-    let receiver_count = AtomicU8::new(0);
+    let receiver_count = Arc::new(AtomicU8::new(0));
     loop {
         let mut cancellation = pin!(cancel_token.cancelled().fuse());
         let mut accept = pin!(listener.accept().fuse());
@@ -86,7 +86,12 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
         select! {
           result = accept => {
             println!("Received socket connection");
-            handle_socket(result, &tx, shutdown_delay, cancel_token.clone(), &receiver_count).await?
+            let cloned_token = cancel_token.clone();
+            let receiver_count = receiver_count.clone();
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                handle_socket(result, &tx, shutdown_delay, cloned_token, &receiver_count).await
+            });
           },
           _ = cancellation => {
             println!("Received cancellation signal");
