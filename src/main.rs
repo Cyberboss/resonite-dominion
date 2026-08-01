@@ -140,9 +140,11 @@ async fn handle_socket(
                     .await;
                 }
                 "register_shutdown_warning" => {
-                    println!("Shutdown warning registration received");
                     shutdown_warning_registered.store(false, Ordering::Release);
-                    receiver_count.fetch_add(1, Ordering::Relaxed);
+                    println!(
+                        "Shutdown warning registration received. Count is {}",
+                        receiver_count.fetch_add(1, Ordering::Relaxed)
+                    );
                     let inner_warning = shutdown_warning_registered.clone();
                     let inner_token = cancellation_token.clone();
                     if let Some(mut ws_sender) = ws_sender_option.take() {
@@ -182,9 +184,18 @@ async fn handle_socket(
                     }
                 }
                 "unregister_shutdown_warning" => {
-                    println!("Shutdown warning registration removed");
-                    receiver_count.fetch_sub(1, Ordering::Relaxed);
-                    shutdown_warning_registered.store(false, Ordering::Release);
+                    if ws_sender_option.is_none() {
+                        println!(
+                            "Shutdown warning registration removed. Count is {}",
+                            receiver_count.fetch_sub(1, Ordering::Relaxed)
+                        );
+                        shutdown_warning_registered.store(false, Ordering::Release);
+                    } else {
+                        println!(
+                            "Shutdown warning registration removal attempted, but none was present. Count is {}",
+                            receiver_count.load(Ordering::Relaxed)
+                        );
+                    }
                 }
                 _ => {}
             }
