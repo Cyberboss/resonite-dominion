@@ -11,6 +11,7 @@ let
 
     src = ./.;
     cargoLock.lockFile = ./Cargo.lock;
+    meta.mainProgram = service-name;
   };
 
   launch-script = pkgs.writeShellScriptBin "launch-script" ''
