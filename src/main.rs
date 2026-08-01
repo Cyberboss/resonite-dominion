@@ -184,8 +184,6 @@ async fn handle_socket(
                 }
                 _ => {}
             }
-        } else {
-            eprintln!("Received non-text command!");
         }
     }
 
