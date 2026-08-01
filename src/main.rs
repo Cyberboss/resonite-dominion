@@ -148,7 +148,7 @@ async fn handle_socket(
                     shutdown_warning_registered.store(false, Ordering::Release);
                     println!(
                         "Shutdown warning registration received. Count is {}",
-                        receiver_count.fetch_add(1, Ordering::Relaxed)
+                        receiver_count.fetch_add(1, Ordering::Relaxed) + 1
                     );
                     let inner_warning = shutdown_warning_registered.clone();
                     let inner_token = cancellation_token.clone();
@@ -192,7 +192,7 @@ async fn handle_socket(
                     if ws_sender_option.is_none() {
                         println!(
                             "Shutdown warning registration removed. Count is {}",
-                            receiver_count.fetch_sub(1, Ordering::Relaxed)
+                            receiver_count.fetch_sub(1, Ordering::Relaxed) - 1
                         );
                         shutdown_warning_registered.store(false, Ordering::Release);
                     } else {
