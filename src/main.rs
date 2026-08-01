@@ -146,7 +146,7 @@ async fn handle_socket(
                     .await;
                 }
                 "register_shutdown_warning" => {
-                    shutdown_warning_registered.store(false, Ordering::Release);
+                    shutdown_warning_registered.store(true, Ordering::Release);
                     println!(
                         "Shutdown warning registration received. Count is {}",
                         receiver_count.fetch_add(1, Ordering::Relaxed) + 1
