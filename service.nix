@@ -1,35 +1,31 @@
-inputs@{
-  config,
-  lib,
-  pkgs,
-  ...
-}:
+inputs@{ config, lib, pkgs, ... }:
 
 let
-  service-name = "resonite-dominion";
+  manifest = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package;
+  service-name = manifest.name;
   cfg = config.services.${service-name};
 
   package = pkgs.rustPlatform.buildRustPackage rec {
     pname = service-name;
-    version = "1.0.0";
+    version = manifest.version;
 
     src = ./.;
     cargoLock.lockFile = ./Cargo.lock;
   };
-  
+
   launch-script = pkgs.writeShellScriptBin "launch-script" ''
     set -euxo pipefail
-    exec ${package}/bin/resonite-dominion --port ${builtins.toString cfg.port} --shutdown-seconds ${builtins.toString cfg.shutdown-seconds} daemon
+    exec ${lib.getExe package} --port ${
+      builtins.toString cfg.port
+    } --shutdown-seconds ${builtins.toString cfg.shutdown-seconds} daemon
   '';
-in
-{
-  ##### interface. here we define the options that users of our service can specify
+in {
   options.services.${service-name} = {
     enable = lib.mkEnableOption "";
     shutdown-seconds = lib.mkOption {
       type = lib.types.ints.u32;
       description = ''
-        The name of the steam account to use.
+        The duration in seconds to wait before termination if any shutdown handlers are registered
       '';
       default = 600;
     };
@@ -84,9 +80,10 @@ in
           User = cfg.username;
           Type = "exec";
           ExecStart = "${launch-script}/bin/launch-script";
-          TimeoutStopSec = "${(builtins.toString (cfg.shutdown-seconds + 60))}s";
+          TimeoutStopSec =
+            "${(builtins.toString (cfg.shutdown-seconds + 60))}s";
           Restart = "always";
-          KillSignal = "SIGINT"; # Resonite doesn't respond to SIGTERM and dies immediately
+          KillSignal = "SIGINT";
         };
         bindsTo = [ cfg.headless-service ];
         after = [ cfg.headless-service ];

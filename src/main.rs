@@ -84,8 +84,12 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
         let mut accept = pin!(listener.accept().fuse());
 
         select! {
-          result = accept => handle_socket(result, &tx, shutdown_delay, cancel_token.clone(), &receiver_count).await?,
+          result = accept => {
+            println!("Received socket connection");
+            handle_socket(result, &tx, shutdown_delay, cancel_token.clone(), &receiver_count).await?
+          },
           _ = cancellation => {
+            println!("Received cancellation signal");
             break;
           }
           _ = ctrl_c => {
