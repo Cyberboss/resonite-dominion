@@ -1,6 +1,8 @@
 use std::{
+    fs::read_to_string,
     net::SocketAddr,
     ops::Add,
+    path::PathBuf,
     pin::pin,
     str::FromStr,
     sync::{
@@ -43,6 +45,9 @@ struct Cli {
 
     #[arg(long)]
     stop_systemd_service: Option<String>,
+
+    #[arg(long)]
+    reason_file_path: PathBuf,
 }
 
 #[tokio::main]
@@ -50,7 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Daemon => daemon(cli.port, Duration::from_secs(cli.shutdown_seconds)).await?,
+        Commands::Daemon => {
+            daemon(
+                cli.port,
+                Duration::from_secs(cli.shutdown_seconds),
+                &cli.reason_file_path,
+            )
+            .await?
+        }
         Commands::Command { command } => {
             println!("Establishing connection");
             let uri = Uri::from_str(format!("ws://127.0.0.1:{}", cli.port).as_str()).unwrap();
@@ -71,7 +83,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
+async fn daemon(
+    port: u16,
+    shutdown_delay: Duration,
+    reason_file_path: &PathBuf,
+) -> Result<(), Error> {
     let (tx, _) = broadcast::channel::<()>(1);
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
     let cancel_token = CancellationToken::new();
@@ -90,8 +106,9 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
             let cloned_token = cancel_token.clone();
             let receiver_count = receiver_count.clone();
             let local_tx = tx.clone();
+            let local_reason_file_path = reason_file_path.clone();
             tokio::spawn(async move {
-                handle_socket(result, &local_tx, shutdown_delay, cloned_token, &receiver_count).await
+                handle_socket(result, &local_tx, shutdown_delay, cloned_token, &receiver_count, &local_reason_file_path).await
             });
           },
           _ = cancellation => {
@@ -100,7 +117,7 @@ async fn daemon(port: u16, shutdown_delay: Duration) -> Result<(), Error> {
           }
           _ = ctrl_c => {
             println!("Received Ctrl+C");
-            shutdown_process(&tx,shutdown_delay, cancel_token.clone(), &receiver_count).await;
+            shutdown_process(&tx, shutdown_delay, cancel_token.clone(), &receiver_count).await;
             break;
           }
         }
@@ -116,6 +133,7 @@ async fn handle_socket(
     shutdown_delay: Duration,
     cancellation_token: CancellationToken,
     receiver_count: &AtomicU8,
+    reason_file_path: &PathBuf,
 ) -> Result<(), Error> {
     let (socket, _) = result?;
     let peer_addr = socket.peer_addr()?;
@@ -155,6 +173,7 @@ async fn handle_socket(
                     let inner_token = cancellation_token.clone();
                     if let Some(mut ws_sender) = ws_sender_option.take() {
                         let mut receiver = shutdown_warning_sender.subscribe();
+                        let reason_file_path = reason_file_path.clone();
                         tokio::spawn(async move {
                             match receiver.recv().await {
                                 Ok(_) => {
@@ -163,9 +182,15 @@ async fn handle_socket(
                                         return;
                                     }
 
+                                    let shutdown_reason = match read_to_string(reason_file_path) {
+                                        Ok(shutdown_reason) => shutdown_reason,
+                                        Err(e) => e.to_string(),
+                                    };
+
                                     let shutdown_timestamp = Utc::now().add(shutdown_delay);
                                     let iso8601 = shutdown_timestamp.to_rfc3339();
-                                    let command = format!("shutdown_at:{}", iso8601);
+                                    let command =
+                                        format!("shutdown_at:{}|{}", iso8601, shutdown_reason);
                                     println!(
                                         "Sending shutdown command to {}: {}",
                                         peer_addr, command
