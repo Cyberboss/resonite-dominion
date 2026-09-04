@@ -149,6 +149,8 @@ async fn handle_socket(
     let shutdown_warning_registered = Arc::new(AtomicBool::new(false));
     println!("Websocket connection established, awaiting command...");
 
+    let warning_sent = AtomicBool::new(false);
+
     while let Some(Ok(msg)) = ws_receiver.next().await {
         if let Some(text) = msg.as_text() {
             println!("Received text command: {}", text);
@@ -205,6 +207,8 @@ async fn handle_socket(
                                         );
                                         inner_token.cancel();
                                     }
+
+                                    warning_sent.store(true, Ordering::Release);
                                 }
                                 Err(err) => {
                                     eprintln!(
@@ -233,6 +237,14 @@ async fn handle_socket(
                 _ => {}
             }
         }
+    }
+
+    if !warning_sent.load(Ordering::Acquire) && ws_sender_option.is_none() {
+        println!(
+            "Shutdown warning registration disconnected. Count is {}",
+            receiver_count.fetch_sub(1, Ordering::Relaxed) - 1
+        );
+        shutdown_warning_registered.store(false, Ordering::Release);
     }
 
     Ok(())
