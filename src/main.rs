@@ -149,7 +149,7 @@ async fn handle_socket(
     let shutdown_warning_registered = Arc::new(AtomicBool::new(false));
     println!("Websocket connection established, awaiting command...");
 
-    let warning_sent = AtomicBool::new(false);
+    let warning_sent = Arc::new(AtomicBool::new(false));
 
     while let Some(Ok(msg)) = ws_receiver.next().await {
         if let Some(text) = msg.as_text() {
@@ -173,6 +173,7 @@ async fn handle_socket(
                     );
                     let inner_warning = shutdown_warning_registered.clone();
                     let inner_token = cancellation_token.clone();
+                    let inner_sent = warning_sent.clone();
                     if let Some(mut ws_sender) = ws_sender_option.take() {
                         let mut receiver = shutdown_warning_sender.subscribe();
                         let reason_file_path = reason_file_path.clone();
@@ -208,7 +209,7 @@ async fn handle_socket(
                                         inner_token.cancel();
                                     }
 
-                                    warning_sent.store(true, Ordering::Release);
+                                    inner_sent.store(true, Ordering::Release);
                                 }
                                 Err(err) => {
                                     eprintln!(
