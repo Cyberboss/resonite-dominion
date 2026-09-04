@@ -27,6 +27,7 @@ let
     set -euxo pipefail
 
     echo "Resonite Update" > "${reason-file-path}"
+    chmod 666 "${reason-file-path}"
   '';
   post-update-clean = pkgs.writeShellScriptBin "post-update-clean.sh" ''
     set -euxo pipefail
@@ -72,7 +73,7 @@ in {
     update-reason-file-path = lib.mkOption {
       type = lib.types.nonEmptyStr;
       description = ''
-        The name of the resonite-headless-update service ending in ".service".
+        The name of the resonite-headless-update service ending in ".service". Must have 666 permissions!
       '';
       default = "/run/${service-name}/update_reason.txt";
     };
