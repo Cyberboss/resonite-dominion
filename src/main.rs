@@ -182,15 +182,17 @@ async fn handle_socket(
                                         return;
                                     }
 
-                                    let shutdown_reason = match read_to_string(reason_file_path) {
-                                        Ok(shutdown_reason) => shutdown_reason,
-                                        Err(e) => e.to_string(),
-                                    };
-
                                     let shutdown_timestamp = Utc::now().add(shutdown_delay);
                                     let iso8601 = shutdown_timestamp.to_rfc3339();
-                                    let command =
-                                        format!("shutdown_at:{}|{}", iso8601, shutdown_reason);
+                                    let command = match read_to_string(reason_file_path) {
+                                        Ok(shutdown_reason) => {
+                                            format!("shutdown_at:{}|{}", iso8601, shutdown_reason)
+                                        }
+                                        Err(_) => {
+                                            format!("shutdown_at:{}", iso8601)
+                                        }
+                                    };
+
                                     println!(
                                         "Sending shutdown command to {}: {}",
                                         peer_addr, command
