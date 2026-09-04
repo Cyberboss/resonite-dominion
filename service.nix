@@ -24,13 +24,13 @@ let
     } --reason-file-path "${reason-file-path}" daemon
   '';
   pre-update-script = pkgs.writeShellScriptBin "pre-update-script.sh" ''
-    set -euxo pipefail
+    set -uxo pipefail
 
     echo "Resonite Update" > "${reason-file-path}"
     chmod 666 "${reason-file-path}"
   '';
   post-update-clean = pkgs.writeShellScriptBin "post-update-clean.sh" ''
-    set -euxo pipefail
+    set -uxo pipefail
 
     sleep 5
     rm -f "${reason-file-path}"
