@@ -30,7 +30,7 @@ let
     chmod 666 "${reason-file-path}"
   '';
   post-update-clean = pkgs.writeShellScriptBin "post-update-clean.sh" ''
-    set -uxo pipefail
+    set -euxo pipefail
 
     sleep 5
     rm -f "${reason-file-path}"
