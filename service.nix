@@ -91,7 +91,6 @@ in {
           Restart = "always";
           KillSignal = "SIGINT";
           RuntimeDirectory = service-name;
-          RuntimeDirectoryMode = 722;
         };
         bindsTo = [ cfg.headless-service ];
         after = [ cfg.headless-service ];
