@@ -32,7 +32,7 @@ let
   post-update-clean = pkgs.writeShellScriptBin "post-update-clean.sh" ''
     set -euxo pipefail
 
-    sleep 5
+    sleep 10
     rm -f "${reason-file-path}"
   '';
 in {
@@ -102,7 +102,6 @@ in {
           "Watches ${cfg.headless-update-service}.service to generate a 'Resonite Update' update reason";
         serviceConfig = {
           Type = "oneshot";
-          DynamicUser = true;
           ExecStart = lib.getExe pre-update-script;
         };
         before = [ cfg.headless-update-service ];
@@ -114,7 +113,6 @@ in {
         serviceConfig = {
           Type = "oneshot";
           ExecStart = lib.getExe post-update-clean;
-          DynamicUser = true;
         };
         after = [ cfg.headless-update-service ];
         wantedBy = [ cfg.headless-update-service ];
