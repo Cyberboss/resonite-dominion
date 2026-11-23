@@ -37,7 +37,9 @@ let
   '';
 in {
   options.services.${service-name} = {
-    enable = lib.mkEnableOption "";
+    enable =
+      lib.mkEnableOption "Dominion's custom resonite headless websocket server";
+
     shutdown-seconds = lib.mkOption {
       type = lib.types.ints.u32;
       description = ''
